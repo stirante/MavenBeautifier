@@ -47,11 +47,6 @@
         </dependency>
 
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>1.7.5</version>
-        </dependency>
-        <dependency>
             <groupId>org.jline</groupId>
             <artifactId>jline-terminal</artifactId>
             <version>${jline.version}</version>
@@ -123,7 +118,7 @@
                         <configuration>
                             <!--This is the location, where MavenBeautifier jar will be moved, if this profile is chosen-->
                             <!--Used for quick testing-->
-                            <outputDirectory>D:/Maven</outputDirectory>
+                            <outputDirectory>C:/Maven</outputDirectory>
                             <finalName>MavenBeautifier</finalName>
                             <archive>
                                 <manifest>

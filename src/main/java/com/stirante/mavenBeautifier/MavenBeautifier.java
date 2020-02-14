@@ -17,6 +17,9 @@ import org.slf4j.impl.SimpleLogger;
 import javax.inject.Named;
 import java.io.*;
 import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Named
 public class MavenBeautifier extends AbstractEventSpy {
@@ -31,6 +34,10 @@ public class MavenBeautifier extends AbstractEventSpy {
     private static final String NO_LOG_FILE = "none";
     public static final String FAILED = "[X] ";
     public static final String SUCCEEDED = "[✓] ";
+    public static final String TARGET_STREAM_FIELD = "TARGET_STREAM";
+    public static final String CONFIG_PARAMS_FIELD = "CONFIG_PARAMS";
+    public static final String OUTPUT_CHOICE_FIELD = "outputChoice";
+    public static final String TARGET_PRINT_STREAM_FIELD = "targetPrintStream";
 
     private final Thread thread;
     private volatile String status = "";
@@ -38,9 +45,11 @@ public class MavenBeautifier extends AbstractEventSpy {
     private volatile boolean finished = false;
     private int animationIndex = 0;
 
+    @SuppressWarnings("JavaReflectionMemberAccess")
     public MavenBeautifier() {
         AnsiConsole.systemInstall();
         MessageUtils.setColorEnabled(false);
+        OutputStream os = new ByteArrayOutputStream();
         try {
             String logFile = new File("").getAbsoluteFile().getName() + ".log";
             try {
@@ -50,17 +59,35 @@ public class MavenBeautifier extends AbstractEventSpy {
                 }
             } catch (SecurityException ignored) {
             }
-            OutputStream os;
-            if (logFile.equalsIgnoreCase(NO_LOG_FILE)) {
-                os = new ByteArrayOutputStream();
-            }
-            else {
+            if (!logFile.equalsIgnoreCase(NO_LOG_FILE)) {
                 os = new FileOutputStream(new File(logFile));
             }
-            Field stream = SimpleLogger.class.getDeclaredField("TARGET_STREAM");
-            stream.setAccessible(true);
-            stream.set(null, new PrintStream(os));
-        } catch (NoSuchFieldException | FileNotFoundException | IllegalAccessException e) {
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            List<String> fields = Arrays.stream(SimpleLogger.class.getDeclaredFields())
+                    .map(Field::getName)
+                    .collect(Collectors.toList());
+            if (fields.contains(TARGET_STREAM_FIELD)) {
+                // This is for Maven 3.5.0
+                Field stream = SimpleLogger.class.getDeclaredField(TARGET_STREAM_FIELD);
+                stream.setAccessible(true);
+                stream.set(null, new PrintStream(os));
+            }
+            else if (fields.contains(CONFIG_PARAMS_FIELD)) {
+                // This is for Maven 3.6.0
+                Field config = SimpleLogger.class.getDeclaredField(CONFIG_PARAMS_FIELD);
+                config.setAccessible(true);
+                Object c = config.get(null);
+                Field outputChoice = c.getClass().getDeclaredField(OUTPUT_CHOICE_FIELD);
+                outputChoice.setAccessible(true);
+                Object oc = outputChoice.get(c);
+                Field targetPrintStream = oc.getClass().getDeclaredField(TARGET_PRINT_STREAM_FIELD);
+                targetPrintStream.setAccessible(true);
+                targetPrintStream.set(oc, new PrintStream(os));
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
             e.printStackTrace();
         }
         thread = new Thread(() -> {
@@ -110,8 +137,7 @@ public class MavenBeautifier extends AbstractEventSpy {
     }
 
     @Override
-    public void onEvent(Object event)
-            throws Exception {
+    public void onEvent(Object event) {
         try {
 //            System.out.println(Ansi.ansi().fgBlue().a(event.getClass()).reset());
             if (event instanceof ExecutionEvent) {
